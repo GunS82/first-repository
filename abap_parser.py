@@ -1,81 +1,68 @@
 #!/usr/bin/env python3
-"""Parse ABAP code with Tree-sitter and validate object names.
-
-This script extracts tables, classes and function modules from an ABAP
-source file using the Tree-sitter grammar for ABAP. Extracted names are
-compared with reference lists stored in a directory `base` containing
-`tables.txt`, `classes.txt` and `functions.txt`.
-
-Usage:
-    python abap_parser.py SOURCE_FILE BASE_DIR OUTPUT_JSON
-"""
+"""Parse ABAP code with ABAP Code Scanner and validate object names."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
+from typing import Dict, List, Set
 
-from tree_sitter import Language, Parser
-
-# Path to compiled Tree-sitter languages library
-LANG_SO = Path('build') / 'my-languages.so'
-
-# Initialise parser
-ABAP_LANGUAGE = Language(str(LANG_SO), 'abap')
-parser = Parser()
-parser.set_language(ABAP_LANGUAGE)
+from scanner import Scanner
 
 
-def extract_objects(path: Path) -> dict[str, list[str]]:
-    """Parse ABAP source and return detected object names."""
-    code = path.read_bytes()
-    text = code.decode('utf8', errors='ignore')
-    tree = parser.parse(code)
-    root = tree.root_node
+class SimpleConfig:
+    """Minimal configuration for Scanner."""
 
-    classes: set[str] = set()
-    functions: set[str] = set()
-    forms: set[str] = set()
+    def __init__(self, checks: List[str], file_extensions: List[str] | None = None):
+        self._checks = checks
+        self._file_extensions = file_extensions or ['.abap']
 
-    def walk(node):
-        if node.type == 'class_definition':
-            name = node.child_by_field_name('name')
-            if name:
-                classes.add(text[name.start_byte:name.end_byte])
-        elif node.type == 'function_definition':
-            name = node.child_by_field_name('name')
-            if name:
-                functions.add(text[name.start_byte:name.end_byte])
-        elif node.type == 'form_definition':
-            name = node.child_by_field_name('name')
-            if name:
-                forms.add(text[name.start_byte:name.end_byte])
-        for child in node.children:
-            walk(child)
+    def get_checks(self) -> List[str]:
+        return self._checks
 
-    walk(root)
+    def get_file_extensions(self) -> List[str]:
+        return self._file_extensions
 
-    tables = set(re.findall(r"FROM\s+([A-Za-z0-9_/]+)", text, flags=re.IGNORECASE))
+    def get_exclude_patterns(self) -> List[str]:
+        return []
+
+
+def extract_objects(path: Path) -> Dict[str, List[str]]:
+    """Run scanner on the file and collect object names."""
+    config = SimpleConfig(['CheckClasses', 'CheckFunctions', 'CheckTables'], [path.suffix])
+    scanner = Scanner(config)
+    results = scanner.scan(str(path), num_threads=1)
+
+    classes: Set[str] = set()
+    functions: Set[str] = set()
+    tables: Set[str] = set()
+
+    for res in results:
+        name = res.message.upper()
+        if res.title == 'CLASS':
+            classes.add(name)
+        elif res.title == 'FUNCTION':
+            functions.add(name)
+        elif res.title == 'TABLE':
+            tables.add(name)
 
     return {
         'classes': sorted(classes),
         'functions': sorted(functions),
-        'forms': sorted(forms),
         'tables': sorted(tables),
     }
 
 
-def load_base_list(base_dir: Path, name: str) -> set[str]:
+def load_base_list(base_dir: Path, name: str) -> Set[str]:
     """Load reference names from BASE_DIR/NAME.txt."""
     path = base_dir / f"{name}.txt"
     if path.is_file():
-        return {line.strip() for line in path.read_text(encoding='utf8').splitlines() if line.strip()}
+        return {line.strip().upper() for line in path.read_text(encoding='utf8').splitlines() if line.strip()}
     return set()
 
 
-def compare_found(found: list[str], base: set[str]) -> dict:
+def compare_found(found: List[str], base: Set[str]) -> Dict:
     """Compare extracted names with reference set."""
     found_set = set(found)
     total = len(found_set)
