@@ -1,54 +1,20 @@
 # ABAP Parser Example
 
-This repository contains a small script for parsing ABAP source files using
-[Tree-sitter](https://tree-sitter.github.io/) and validating the names of
-objects against reference lists. The project is intended to be run locally on a
-single machine (Windows or other OS).
+This repository contains a small script for parsing ABAP source files using the
+[ABAP Code Scanner](https://github.com/redrays-io/ABAP-Code-Scanner) library.
+The script extracts class names, function module calls and database tables used
+in the source and validates them against reference lists. The project is
+intended to be run locally on a single machine (Windows or other OS).
 
 ## Prerequisites
 
-1. **Python 3.9+**
-2. **Node.js** (to install `tree-sitter-cli` for generating the parser)
-3. **CMake** (required by Tree-sitter when building languages)
+- **Python 3.9+**
 
-Install Python packages:
+Install the required Python packages:
 
 ```bash
-pip install tree_sitter
+pip install -r requirements.txt
 ```
-
-Install Tree-sitter CLI using npm:
-
-```bash
-npm install -g tree-sitter-cli
-```
-
-## Building the ABAP Parser
-
-Clone the grammar for ABAP and generate the parser:
-
-```bash
-git clone https://github.com/abaplint/tree-sitter-abap.git
-cd tree-sitter-abap
-# Generate source files
-tree-sitter generate
-cd ..
-```
-
-Build the shared library containing the ABAP grammar:
-
-```bash
-python - <<'PY'
-from tree_sitter import Language
-Language.build_library(
-    'build/my-languages.so',
-    ['tree-sitter-abap']
-)
-PY
-```
-
-After this step the file `build/my-languages.so` will contain the compiled
-Tree-sitter grammar used by the parser script.
 
 ## Preparing Reference Lists
 
@@ -75,7 +41,6 @@ about which names were not found in the reference lists.
   "extracted": {
     "classes": ["ZCL_MY_CLASS"],
     "functions": ["MY_FUNCTION"],
-    "forms": ["my_form"],
     "tables": ["MARA", "VBAP"]
   },
   "statistics": {
